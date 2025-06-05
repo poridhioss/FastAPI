@@ -178,6 +178,157 @@ The first lab introduces core FastAPI concepts through practical examples:
  - Set up FastAPI project
  - Create a basic /ping health check endpoint
  - Learn path/query parameters
+
+### FastAPI Path and Query Parameters Guide
+
+#### Path Parameters
+
+Path parameters are **required** parts of the URL path, defined with curly braces `{}`.
+
+##### Single Path Parameter
+```python
+@app.get("/user/{user_id}")
+def get_user(user_id: int):
+    return {"user_id": user_id}
+```
+**Usage**: `GET /user/5`
+
+##### Multiple Path Parameters
+```python
+@app.get("/blogs/{blog_id}/comments/{comment_id}")
+def get_comment(blog_id: int, comment_id: int):
+    return {"blog_id": blog_id, "comment_id": comment_id}
+```
+**Usage**: `GET /blogs/10/comments/3`
+
+##### Path Parameter Validation
+```python
+@app.get("/user/{user_id}")
+def get_user(user_id: int = Path(..., gt=0, description="User ID must be positive")):
+    return {"user_id": user_id}
+```
+
+#### Query Parameters
+
+Query parameters appear after `?` in the URL and are separated by `&`.
+
+##### Default Query Parameters
+Parameters with default values can be **skipped** in the request:
+
+```python
+@app.get("/blog/all")
+def get_blogs(page: int = Query(1), page_size: int = Query(10)):
+    return {"page": page, "page_size": page_size}
+```
+
+**Usage**:
+- `GET /blog/all` → uses defaults (page=1, page_size=10)
+- `GET /blog/all?page=2` → page=2, page_size=10 (default)
+- `GET /blog/all?page=2&page_size=20` → both specified
+
+##### Optional Query Parameters
+Optional parameters become `None` when not provided:
+
+```python
+@app.get("/blog/search")
+def search_blogs(
+    q: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    author: Optional[str] = Query(None)
+):
+    return {"q": q, "category": category, "author": author}
+```
+
+**Usage**:
+- `GET /blog/search` → all parameters are `None`
+- `GET /blog/search?q=python` → q="python", others are `None`
+- `GET /blog/search?q=python&author=john` → q="python", author="john", category=`None`
+
+##### Parameter Validation/Filters
+
+FastAPI provides built-in validation for parameters:
+
+###### Numeric Validation
+```python
+@app.get("/products/{product_id}")
+def get_product(
+    product_id: int = Path(..., ge=1, le=999999),  # Between 1 and 999999
+    discount: float = Query(None, ge=0.0, le=100.0)  # 0% to 100%
+):
+    return {"product_id": product_id, "discount": discount}
+```
+
+###### String Validation
+```python
+@app.get("/test")
+def test_params(
+    name: str = Query(..., min_length=1, max_length=50),  # 1-50 characters
+    email: str = Query(..., regex=r'^[^@]+@[^@]+\.[^@]+$')  # Email format
+):
+    return {"name": name, "email": email}
+```
+
+###### List Parameters
+```python
+@app.get("/search")
+def search(tags: List[str] = Query([])):
+    return {"tags": tags}
+```
+**Usage**: `GET /search?tags=python&tags=web&tags=api`
+
+#### Combining Path and Query Parameters
+
+```python
+@app.get("/api/v1/users/{user_id}/posts/{post_id}")
+def get_user_post(
+    # Required path parameters
+    user_id: int = Path(..., gt=0),
+    post_id: int = Path(..., gt=0),
+    
+    # Optional query parameters with defaults
+    include_comments: bool = Query(False),
+    include_likes: bool = Query(False),
+    format: str = Query("json")
+):
+    return {
+        "user_id": user_id,
+        "post_id": post_id,
+        "include_comments": include_comments,
+        "include_likes": include_likes,
+        "format": format
+    }
+```
+
+**Usage Examples**:
+- `GET /api/v1/users/5/posts/12` → uses all defaults
+- `GET /api/v1/users/5/posts/12?include_comments=true` → only comments included
+- `GET /api/v1/users/5/posts/12?include_comments=true&include_likes=true&format=xml`
+
+#### Key Differences
+
+| Feature | Path Parameters | Query Parameters |
+|---------|----------------|------------------|
+| **Required** | Always required | Can be optional |
+| **Position** | Fixed position in URL | After `?`, any order |
+| **Default Values** | Not supported | Supported |
+| **None Values** | Not applicable | Supported with Optional |
+| **URL Structure** | `/users/{id}` | `/users?page=1&size=10` |
+
+#### Common Validation Filters
+
+- **Numeric**: `ge` (≥), `gt` (>), `le` (≤), `lt` (<)
+- **String**: `min_length`, `max_length`, `regex`
+- **General**: `description` for documentation
+
+#### Best Practices
+
+1. Use **path parameters** for resource identification (user ID, post ID)
+2. Use **query parameters** for filtering, pagination, and optional features
+3. Provide **default values** for commonly used query parameters
+4. Use **Optional** for parameters that can be skipped
+5. Add **validation** to ensure data integrity
+6. Include **descriptions** for better API documentation
+
 ### Endpoints Covered:
 
 #### Health Check
@@ -292,17 +443,92 @@ If your ordering is correct:
 Remember: **Specific routes first, general routes last!**
 
 
-## Running the Labs
+### Testing Endpoints
+#### API Testing Guide
 
-### Development Mode
+##### Access Interactive Documentation
+
+When your FastAPI server is running, go to:
+```
+http://localhost:8000/docs
+```
+
+##### Testing Endpoints
+![Swagger UI](./assets/lab01_testingEndpoint_01.png)
+
+###### Using the Interactive Docs
+1. Find the endpoint you want to test
+2. Click on it to expand
+3. Click "Try it out"
+4. Fill in the parameters (like in the screenshot: user_id=5, post_id=12)
+5. Click "Execute"
+6. View the response
+
+###### Using cURL Commands
+![Using terminal](./assets/lab01_testingEndpoint_terminal.png)
+
+Copy the request URL from the docs and use it with cURL:
+
+```bash
+curl -X 'GET' \
+  'http://127.0.0.1:8000/api/v1/users/6/posts/12?include_comments=true&include_likes=true&format=json' \
+  -H 'accept: application/json'
+```
+
+###### Using Browser
+
+For GET requests, copy the URL from the docs and paste directly into your browser:
+```
+http://127.0.0.1:8000/api/v1/users/5/posts/12?include_comments=true&include_likes=true&format=json
+```
+
+##### Quick Testing Steps
+
+1. **Start your FastAPI server**
+2. **Go to** `http://localhost:8000/docs`
+3. **Find your endpoint** in the list
+4. **Click and test** using the interface
+5. **Copy the cURL command** if you need to use it elsewhere
+
+The interactive docs automatically generate the correct URLs and show you exactly what your API returns.
+
+## Running the Labs
+### FastAPI Development Setup Guide
+
+#### Windows Setup for VS Code Terminal
+
+**Important**: For Windows users working with multiline commands in VS Code, you'll need to configure Git Bash as your default terminal.
+
+##### VS Code Terminal Configuration
+
+Add this to your VS Code `settings.json`:
+
+```json
+{
+  "terminal.integrated.profiles.windows": {
+    "Git Bash": {
+      "path": "C:\\Program Files\\Git\\bin\\bash.exe"
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "Git Bash"
+}
+```
+
+**Prerequisites**: 
+- Install Git for Windows (includes Git Bash)
+- This enables proper handling of Unix-style commands and multiline scripts
+
+### Development Commands
+
+#### Development Mode
 ```bash
 # Navigate to any lab directory
 cd lab01
 
 # Activate virtual environment
-venv\Scripts\activate.bat  # Windows
+venv\Scripts\activate.bat  # Windows Command Prompt
 # or
-source venv/bin/activate   # macOS/Linux
+source venv/bin/activate   # Git Bash/macOS/Linux
 
 # Run with auto-reload
 uvicorn app.main:app --reload
@@ -314,7 +540,7 @@ uvicorn app.main:app --reload
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Custom Configuration
+#### Custom Configuration
 ```bash
 # Run on different host/port
 uvicorn app.main:app --host 127.0.0.1 --port 3000 --reload
