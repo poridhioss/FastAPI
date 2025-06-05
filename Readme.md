@@ -6,11 +6,11 @@ A comprehensive collection of FastAPI labs designed to teach modern Python web A
 
 - [What is FastAPI?](#what-is-fastapi)
 - [FastAPI vs Flask](#fastapi-vs-flask)
+- [API Documentation](#api-documentation)
 - [Installation](#installation)
 - [Project Structure](#project-structure)
 - [Labs Overview](#labs-overview)
 - [Lab 01: FastAPI Fundamentals](#lab-01-fastapi-fundamentals)
-- [API Documentation](#api-documentation)
 - [Running the Labs](#running-the-labs)
 - [Next Steps](#next-steps)
 
@@ -175,9 +175,9 @@ fastapi-labs/
 The first lab introduces core FastAPI concepts through practical examples:
 
 ### Goals
-  Set up FastAPI project
-  Create a basic /ping health check endpoint
-  Learn path/query parameters
+ - Set up FastAPI project
+ - Create a basic /ping health check endpoint
+ - Learn path/query parameters
 ### Endpoints Covered:
 
 #### Health Check
@@ -211,6 +211,86 @@ The first lab introduces core FastAPI concepts through practical examples:
 - Optional parameters with default values
 - List parameters for multiple values
 - Combining path and query parameters
+
+### FastAPI Endpoint Ordering Guide
+
+Why endpoint ordering matters in FastAPI and how to do it correctly.
+
+#### Why Ordering Matters
+
+FastAPI matches routes **from top to bottom** using a **first-match wins** approach. Once it finds a matching pattern, it stops looking and executes that endpoint.
+
+#### ❌ Wrong Order Example
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+# This general route comes first - PROBLEM!
+@app.get("/users/{user_id}")
+def get_user(user_id: str):
+    return {"user_id": user_id}
+
+# This will NEVER be reached because "me" matches {user_id}
+@app.get("/users/me")
+def get_current_user():
+    return {"message": "Current user info"}
+```
+
+#### ✅ Correct Order Example
+
+```python
+from fastapi import FastAPI
+from enum import Enum
+
+app = FastAPI()
+
+class ItemType(str, Enum):
+    electronics = "electronics"
+    books = "books"
+
+# 1. Static/specific paths FIRST
+@app.get("/users/me")
+def get_current_user():
+    return {"message": "Current user info"}
+
+@app.get("/users/stats")
+def get_user_stats():
+    return {"message": "User statistics"}
+
+# 2. Constrained parameters (enums) SECOND
+@app.get("/items/category/{category}")
+def get_items_by_category(category: ItemType):
+    return {"category": category}
+
+# 3. General parameters LAST
+@app.get("/users/{user_id}")
+def get_user(user_id: int):
+    return {"user_id": user_id}
+
+@app.get("/items/{item_id}")
+def get_item(item_id: int):
+    return {"item_id": item_id}
+```
+
+#### Golden Rule
+
+**Order your endpoints from MOST SPECIFIC to LEAST SPECIFIC:**
+
+1. **Static paths** (e.g., `/users/me`, `/items/search`)
+2. **Constrained parameters** (e.g., enums, specific types)
+3. **General parameters** (e.g., `/{user_id}`, `/{item_id}`)
+
+#### 🧪 Quick Test
+
+If your ordering is correct:
+- `/users/me` → hits the specific endpoint
+- `/users/123` → hits the general `{user_id}` endpoint
+- `/items/search` → hits search endpoint, not `{item_id}`
+
+Remember: **Specific routes first, general routes last!**
+
 
 ## Running the Labs
 
