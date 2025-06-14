@@ -1,2 +1,4 @@
 venv/
 **/.env
+lab02/alembic/
+lab02/alembic.ini

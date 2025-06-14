@@ -294,7 +294,7 @@ http://localhost:8000/docs
 6. View the response
 
 ###### Using cURL Commands
-![Using terminal](./assets/lab01_testingEndpoint_terminal.png)
+![Using terminal](../assets/lab01_testingEndpoint_terminal.png)
 
 Copy the request URL from the docs and use it with cURL:
 
