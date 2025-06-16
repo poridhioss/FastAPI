@@ -308,7 +308,8 @@ lab02/
 ```
 
 ---
-
+## Project Workflow
+![Process Workflow](./assets/FastAPI_Lab2.drawio.svg)
 ## 🛠️ Implementation Details
 
 ### Database Configuration (app/database.py)
