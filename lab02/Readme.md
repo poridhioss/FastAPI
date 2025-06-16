@@ -53,12 +53,7 @@ touch .env
 Add the following content to `.env`:
 ```env
 # Database Configuration
-DATABASE_URL=postgresql://myuser:mypassword@localhost:5432/mydb
-
-# PostgreSQL Credentials
-POSTGRES_USER=myuser
-POSTGRES_PASSWORD=mypassword
-POSTGRES_DB=mydb
+DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 ```
 
 ### Step 3: Docker Setup for PostgreSQL
@@ -151,11 +146,95 @@ alembic upgrade head
 ### Step 6: Start the Application
 ```bash
 # Start FastAPI server
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ---
 
+## Testing Using Postman
+
+## Overview
+After deploying the User Management API in the lab environment, we can thoroughly test all endpoints using Postman.
+For this we need to create a load balancer first, for creating a load balamcer we need to find out the ip address of our virtual machine, we can find it by writing the below code in the terminal
+```bash
+ip addr show eth0
+```
+This will give us a ip address like 10.13.12.133/16 we need to take 10.13.12.133 part and fill it in the ip address section in the load balancer. For the port section in the load balancer we need to use 8000 as we deployed the api in 8000 port. It will give us a load balancer like `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io`
+As we are using users/ endpoint we need to add this to the load balancer url and then the API is accessible at `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/`. for y
+
+## API Endpoints Testing
+
+
+### 1. POST /users/ - Create New User
+![Post User](./assets/postUsers.png)
+- **Method**: POST
+- **URL**: `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/`
+- **Content-Type**: application/json
+- **Request Body**:
+  ```json
+  {
+    "email": "user@example.com",
+    "username": "string"
+  }
+  ```
+- **Expected Response**: 201 Created
+- **Result**: Successfully creates user and returns complete user object with auto-generated fields
+
+
+### 2. GET /users/{id} - Retrieve Single User
+![Get Users](./assets/get%20Specific%20User.png)
+**Test Case: Valid User ID**
+- **Method**: GET
+- **URL**: `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/1`
+- **Expected Response**: 200 OK
+- **Result**: Successfully returns user data with fields like email, username, id, is_active, created_at, and updated_at
+
+**Test Case: Invalid User ID**
+- **Method**: GET  
+- **URL**: `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/1`
+- **Expected Response**: 404 Not Found
+- **Result**: Returns error message "User not found"
+
+### 3. GET /users/ - Retrieve All Users
+![Get All Users](./assets/get%20Users.png)
+- **Method**: GET
+- **URL**: `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/`
+- **Expected Response**: 200 OK
+- **Result**: Returns array of user objects with complete user information
+
+### 4. PUT /users/{id} - Update User
+![Put User](./assets/update.png)
+- **Method**: PUT
+- **URL**: `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/1`
+- **Content-Type**: application/json
+- **Request Body**:
+  ```json
+  {
+    "email": "user@example.com",
+    "username": "string",
+    "is_active": true
+  }
+  ```
+- **Expected Response**: 200 OK
+- **Result**: Successfully updates user information and returns updated user object
+
+### 5. DELETE /users/{id} - Delete User
+![Delete User](./assets/delete.png)
+- **Method**: DELETE
+- **URL**: `https://67aba1ae1fcfb0b6f0fdce74-lb-934.bm-southeast.lab.poridhi.io/users/1`
+- **Expected Response**: 204 No Content
+- **Result**: Successfully deletes user with empty response body
+
+## Testing Results Summary
+
+All API endpoints are functioning correctly as evidenced by:
+- ✅ Proper HTTP status codes (200, 201, 204, 404)
+- ✅ Correct JSON response formats
+- ✅ Appropriate error handling for invalid requests
+- ✅ Successful CRUD operations on user resources
+- ✅ Response times averaging 140-360ms indicating good performance
+
+The API deployment on the lab environment's virtual machine is stable and ready for production use.
 ## 🔍 Understanding the Technologies
 
 ### PostgreSQL - The Database Engine
