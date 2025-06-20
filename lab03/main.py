@@ -1,121 +1,160 @@
-# main.py
 from fastapi import FastAPI, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
-from typing import List, Optional
 from bson import ObjectId
-import os
-from datetime import datetime
+from typing import List, Optional
+import asyncio
+from contextlib import asynccontextmanager
 
-# Pydantic models for Pydantic v2
+# Pydantic models
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid objectid")
+        return ObjectId(v)
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
+
+class NoteModel(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    title: str = Field(..., min_length=1, max_length=100)
+    content: str = Field(..., min_length=1)
+    tags: Optional[List[str]] = []
+    
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
 class NoteCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
     content: str = Field(..., min_length=1)
-
+    tags: Optional[List[str]] = []
 
 class NoteResponse(BaseModel):
-    id: str = Field(alias="_id")
+    id: str = Field(..., alias="_id")
     title: str
     content: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"populate_by_name": True}
-
-
-# FastAPI app
-app = FastAPI(title="Notes API with MongoDB", version="1.0.0")
-
-# MongoDB connection
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-DATABASE_NAME = "notesdb"
-COLLECTION_NAME = "notes"
-
-client = None
-database = None
-collection = None
-
-
-@app.on_event("startup")
-async def startup_db_client():
-    global client, database, collection
-    client = AsyncIOMotorClient(MONGODB_URL)
-    database = client[DATABASE_NAME]
-    collection = database[COLLECTION_NAME]
+    tags: List[str]
     
-    # Test connection
+    class Config:
+        allow_population_by_field_name = True
+
+# Database connection
+client: Optional[AsyncIOMotorClient] = None
+database = None
+notes_collection = None
+
+async def connect_to_mongo():
+    """Create database connection"""
+    global client, database, notes_collection
     try:
-        await client.admin.command('ping')
-        print("Successfully connected to MongoDB!")
+        # MongoDB connection string for Docker container
+        client = AsyncIOMotorClient("mongodb://admin:password123@localhost:27017/?authSource=admin")
+        database = client.notesdb
+        notes_collection = database.notes
+        
+        # Test the connection
+        await client.admin.command('ismaster')
+        print("✅ Connected to MongoDB successfully!")
+        
     except Exception as e:
-        print(f"Error connecting to MongoDB: {e}")
+        print(f"❌ Error connecting to MongoDB: {e}")
+        raise
 
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
+async def close_mongo_connection():
+    """Close database connection"""
+    global client
     if client:
         client.close()
+        print("🔌 Disconnected from MongoDB")
 
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await connect_to_mongo()
+    yield
+    # Shutdown
+    await close_mongo_connection()
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="Notes API",
+    description="A simple API to store and retrieve notes using MongoDB",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 @app.get("/")
 async def root():
-    return {"message": "Notes API with MongoDB", "status": "running"}
-
+    """Health check endpoint"""
+    return {"message": "Notes API is running!", "status": "healthy"}
 
 @app.get("/notes", response_model=List[NoteResponse])
 async def get_notes():
-    """Get all notes from the collection"""
+    """Retrieve all notes from MongoDB"""
     try:
         notes = []
-        cursor = collection.find({})
+        cursor = notes_collection.find({})
         async for document in cursor:
-            # Convert ObjectId to string for response
+            # Convert ObjectId to string for JSON serialization
             document["_id"] = str(document["_id"])
-            notes.append(document)
+            notes.append(NoteResponse(**document))
+        
         return notes
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving notes: {str(e)}")
 
-
 @app.get("/notes/{note_id}", response_model=NoteResponse)
 async def get_note(note_id: str):
-    """Get a specific note by ID"""
+    """Retrieve a specific note by ID"""
     try:
         if not ObjectId.is_valid(note_id):
             raise HTTPException(status_code=400, detail="Invalid note ID format")
         
-        document = await collection.find_one({"_id": ObjectId(note_id)})
-        if document:
-            document["_id"] = str(document["_id"])
-            return document
-        else:
+        document = await notes_collection.find_one({"_id": ObjectId(note_id)})
+        
+        if document is None:
             raise HTTPException(status_code=404, detail="Note not found")
+        
+        # Convert ObjectId to string
+        document["_id"] = str(document["_id"])
+        return NoteResponse(**document)
+    
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving note: {str(e)}")
 
-
 @app.post("/notes", response_model=NoteResponse, status_code=201)
 async def create_note(note: NoteCreate):
-    """Create a new note"""
+    """Create a new note in MongoDB"""
     try:
-        # Create note document with timestamps
+        # Convert Pydantic model to dict
         note_dict = note.dict()
-        note_dict["created_at"] = datetime.utcnow()
-        note_dict["updated_at"] = datetime.utcnow()
         
         # Insert into MongoDB
-        result = await collection.insert_one(note_dict)
+        result = await notes_collection.insert_one(note_dict)
         
-        # Retrieve the created document
-        created_note = await collection.find_one({"_id": result.inserted_id})
+        # Retrieve the inserted document
+        created_note = await notes_collection.find_one({"_id": result.inserted_id})
+        
+        # Convert ObjectId to string
         created_note["_id"] = str(created_note["_id"])
         
-        return created_note
+        return NoteResponse(**created_note)
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating note: {str(e)}")
-
 
 @app.put("/notes/{note_id}", response_model=NoteResponse)
 async def update_note(note_id: str, note: NoteCreate):
@@ -124,57 +163,68 @@ async def update_note(note_id: str, note: NoteCreate):
         if not ObjectId.is_valid(note_id):
             raise HTTPException(status_code=400, detail="Invalid note ID format")
         
-        # Update document with new timestamp
-        update_data = note.dict()
-        update_data["updated_at"] = datetime.utcnow()
-        
-        result = await collection.update_one(
+        # Update the note
+        result = await notes_collection.update_one(
             {"_id": ObjectId(note_id)},
-            {"$set": update_data}
+            {"$set": note.dict()}
         )
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Note not found")
         
-        # Return updated document
-        updated_note = await collection.find_one({"_id": ObjectId(note_id)})
+        # Retrieve the updated document
+        updated_note = await notes_collection.find_one({"_id": ObjectId(note_id)})
         updated_note["_id"] = str(updated_note["_id"])
         
-        return updated_note
+        return NoteResponse(**updated_note)
+    
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating note: {str(e)}")
 
-
 @app.delete("/notes/{note_id}")
 async def delete_note(note_id: str):
-    """Delete a note"""
+    """Delete a note by ID"""
     try:
         if not ObjectId.is_valid(note_id):
             raise HTTPException(status_code=400, detail="Invalid note ID format")
         
-        result = await collection.delete_one({"_id": ObjectId(note_id)})
+        result = await notes_collection.delete_one({"_id": ObjectId(note_id)})
         
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Note not found")
         
         return {"message": "Note deleted successfully"}
+    
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting note: {str(e)}")
 
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint to verify MongoDB connection"""
+@app.get("/notes/search/{query}")
+async def search_notes(query: str):
+    """Search notes by title or content"""
     try:
-        await client.admin.command('ping')
-        return {"status": "healthy", "database": "connected"}
+        # Create text search query
+        search_filter = {
+            "$or": [
+                {"title": {"$regex": query, "$options": "i"}},
+                {"content": {"$regex": query, "$options": "i"}},
+                {"tags": {"$in": [query]}}
+            ]
+        }
+        
+        notes = []
+        cursor = notes_collection.find(search_filter)
+        async for document in cursor:
+            document["_id"] = str(document["_id"])
+            notes.append(NoteResponse(**document))
+        
+        return notes
+    
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"Error searching notes: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
