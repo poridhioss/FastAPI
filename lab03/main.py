@@ -42,7 +42,7 @@ class NoteResponse(BaseModel):
     id: str = Field(..., alias="_id")
     title: str
     content: str
-    tags: List[str]
+    tags: Optional[List[str]] = []
     
     class Config:
         allow_population_by_field_name = True
