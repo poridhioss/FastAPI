@@ -148,7 +148,8 @@ notes-api/
 ├── requirements.txt       # Python dependencies
 └── README.md             # This file
 ```
-
+## Project Workflow
+![Process Workflow](./assets/FastAPI%20LAb03.drawio.svg)
 ---
 
 ## 🛠️ Implementation Details
