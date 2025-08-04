@@ -1,7 +1,9 @@
 version: '3.8'
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:15
+    container_name: fastapi_postgres
     environment:
       POSTGRES_DB: userdb
       POSTGRES_USER: postgres
@@ -10,13 +12,55 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # MongoDB Database
   mongodb:
     image: mongo:7
+    container_name: fastapi_mongodb
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Application
+  fastapi-app-lab05:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_app_lab05
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/userdb
+      - MONGODB_URL=mongodb://mongodb:27017/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+    volumes:
+      - ./app:/app/app  # For development - remove in production
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:
