@@ -12,8 +12,10 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lab06_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U user"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,12 +32,39 @@ services:
       - "9300:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - lab06_network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
 
+  # FastAPI Application
+  app:
+    build: .
+    container_name: fastapi-notes-app_lab06
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgresql:5432/notesdb_lab06
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - lab06_network
+    volumes:
+      - ./app:/app/app
+      - ./.env:/app/.env
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   elasticsearch_data:
+
+networks:
+  lab06_network:
+    driver: bridge
