@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/notesdb_lab06")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgresql:5432/notesdb_lab06")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

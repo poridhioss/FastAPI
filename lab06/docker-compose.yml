@@ -20,6 +20,19 @@ services:
       timeout: 5s
       retries: 5
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: fastapi-notes-pgadmin_lab06
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    networks:
+      - lab06_network
+    depends_on:
+      - postgresql
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
     container_name: fastapi-notes-elasticsearch_lab06

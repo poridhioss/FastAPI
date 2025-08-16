@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
 from typing import List, Optional
 import logging
 
@@ -48,18 +50,26 @@ def read_root():
 def health_check():
     """Basic health check"""
     return {"status": "healthy", "service": "notes-api"}
-
+    
 @app.get("/health/db")
-def health_check_db(db: Session = Depends(get_db)):
+def health_check_db():
     """Database health check"""
     try:
-        # Try to execute a simple query
-        db.execute("SELECT 1")
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         return {"status": "healthy", "service": "postgresql"}
     except Exception as e:
-        logger.error(f"Database health check failed: {e}")
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        try:
+            safe_url = make_url(str(engine.url)).render_as_string(hide_password=True)
+        except Exception:
+            safe_url = "Unknown DB URL"
 
+        logger.error(f"Database health check failed for {safe_url}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable ({safe_url})"
+        )
+        
 @app.get("/health/elasticsearch")
 async def health_check_elasticsearch():
     """Elasticsearch health check"""
